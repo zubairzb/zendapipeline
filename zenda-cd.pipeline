@@ -1,0 +1,44 @@
+pipeline {
+    agent any
+	
+    environment {
+        DOCKER_IMAGE_TAG = 'v1'
+        DOCKER_HUB_REPO = 'zubairzb/souqapp'
+        ARGOCD_APP_NAME = 'souqapp'
+        ARGOCD_SERVER = 'a77a3ed06f78a4859875c013cd8998c8-534011061.eu-central-1.elb.amazonaws.com'
+    }
+	
+    stages {
+        stage('Code Checkout') {
+            steps {
+                script {
+                    def GIT_CRED='github'
+                    def GIT_PIPE_REPO='https://github.com/zubairzb/zendapipeline.git'
+                    checkout([$class: 'GitSCM', branches: [[name: '*/main']], doGenerateSubmoduleConfigurations: false, extensions: [], submoduleCfg: [], userRemoteConfigs: [[credentialsId: "$GIT_CRED", url: "$GIT_PIPE_REPO"]]])
+                }
+            }
+        }
+		
+        stage('Deploy with Argo CD') {
+            steps {
+                script {
+                    def GIT_PIPE_REPO='https://github.com/zubairzb/zendapipeline.git'
+                    def ARGO_PWD='argocd-password'
+                    def ARGOLOGINCMD = "curl -s -k -d '{\"username\":\"admin\",\"password\":\"${ARGO_PWD}\"}' -H 'Content-Type: application/json' -X POST ${ARGOCD_SERVER}/api/v1/session"
+                    def ARGOSESSION = sh(script: ARGOLOGINCMD, returnStdout: true).trim()
+                    echo "Argo CD login response: ${ARGOSESSION}"
+                    
+                    sh """				
+                    argocd app set ${ARGOCD_APP_NAME} --repo ${GIT_PIPE_REPO} --path . --revision ${DOCKER_IMAGE_TAG} --dest-server https://kubernetes.default.svc --dest-namespace souq-app --server ${ARGOCD_SERVER} --insecure
+                    argocd app sync ${ARGOCD_APP_NAME} --server ${ARGOCD_SERVER} --insecure
+                   """
+                }
+            }
+        }
+    }
+	
+	post {
+        always {
+            cleanWs()
+        }
+}

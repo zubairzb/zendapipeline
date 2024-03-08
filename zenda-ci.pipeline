@@ -1,0 +1,36 @@
+pipeline {
+    agent any
+
+    environment {
+        DOCKER_IMAGE_TAG = 'v1'
+        DOCKER_HUB_REPO = 'zubairzb/souqapp'
+    }
+
+    stages {
+        stage('Code Checkout') {
+            steps {
+                script {
+                    def GIT_CRED='github'
+                    def GIT_CODE_REPO='https://github.com/zubairzb/Souqbackend.git'
+                    checkout([$class: 'GitSCM', branches: [[name: '*/main']], doGenerateSubmoduleConfigurations: false, extensions: [], submoduleCfg: [], userRemoteConfigs: [[credentialsId: "$GIT_CRED", url: "$GIT_CODE_REPO"]]])
+            }}
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    sh 'docker build -t souqapp .'
+            }}
+        }
+
+        stage('Push to Docker Hub') {
+            steps {
+                script {
+                    docker.withRegistry('https://index.docker.io/v1/', 'dockerhub') {
+                        sh '''
+                        docker tag souqapp:latest ${DOCKER_HUB_REPO}:${DOCKER_IMAGE_TAG}
+                        docker push ${DOCKER_HUB_REPO}:${DOCKER_IMAGE_TAG}
+                        '''
+            }}
+        }}
+    }
